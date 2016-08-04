@@ -21,8 +21,7 @@ union all
 select 
 student_number,
 'Medical' "Alert Type",
-alert_medical "Alert Text",
-alert_medicalexpires
+alert_medical "Alert Text"
 from PSSIS_Student_Alerts
 where alert_medical is not null
 and (alert_medicalexpires>=sysdate or alert_medicalexpires='01-JAN-1900' or alert_medicalexpires is null)
