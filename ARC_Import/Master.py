@@ -3,6 +3,8 @@
 Created on Wed Oct 19 15:00:45 2016
 
 @author: larry.jerome
+
+API Keys stored separately
 """
 
 import requests
@@ -18,6 +20,8 @@ import copy
 #os.chdir('C:\ARC_Integration\DeansList\Scripts')
 
 
+apiKeys={...
+        }
 
 schoolid={
             '82':'1000',
@@ -123,9 +127,12 @@ incidentSubtypes={  'Academic Dishonesty':'ACADEMIC', #added to PS
                     'Weapons Possession - Non-firearm (W)':'W-NONGUN',       #added to PS
                     'Weapons Possession - Rifles / Shotgun (W-RIFLESHOTGUN)':'W-RIFLESHOTGUN',      #added to PS
                     'Weapons Possession - Use of more than one of the above (W-MULTIPLE)':'W-MULTIPLE',         #added to PS
-                    'Weapons Possesssion - Any firearm that is not handgun, rifle, or shotgun (W-OTHER)':'W-OTHER',
-                    'Weapons Possession (W)':'W-WEAPON'}
-
+                    'Weapons Possesssion - Any firearm that is not handgun, rifle, or shotgun (W-OTHER)':'W-OTHER', #added to PS
+                    'Weapons Possession (W)':'W-WEAPON', #added to PS
+                    'Physical Altercation':'PHYSICAL ALTERCATION', #added to PS}
+                     None: 'MISSING'
+                    }
+                    
 #these are the the log subtypes for Staff Contact, Student Contact, Parent Contact, and Third Party in PS                    
 commSubtypes={	 'Academics':	'ACADEMICS'
             	,'Attendance':	'ATTENDANCE'
@@ -325,18 +332,20 @@ def getAllHomework(sdt = default_sdt, edt = default_edt):
     return allHomeworkData
     
     
-def getIncidents(school):
+def getIncidents(school,UpdatedSince):
     url='https://kippdc.deanslistsoftware.com/api/v1/incidents?'
     school=school.lower()
-    url=url+'apikey='+apiKeys[school]+'&cf=Y'
+    url=url+'apikey='+apiKeys[school]+'&cf=Y&' #include when changing to updates only
+    url=url+'UpdatedSince='+UpdatedSince #include when changing to updates only
     incidentsData=requests.get(url).json()
+    print url
     return incidentsData['data']
     
-def getAllIncidents():
+def getAllIncidents(UpdatedSince=default_sdt):
     allIncidentsData=[]
     for school in apiKeys:
         print school
-        incidentsData=getIncidents(school)
+        incidentsData=getIncidents(school,UpdatedSince)
         allIncidentsData.extend(incidentsData)
     return allIncidentsData
     
@@ -370,18 +379,20 @@ def getAllUsers():
         user['LastName'].replace(u'\xf3','o')
     return allUsersData
     
-def getComms(school):
+def getComms(school,UpdatedSince):
     print 'retrieving %s comms data...' % (school)
     url='https://kippdc.deanslistsoftware.com/api/beta/export/get-comm-data.php?'
     school=school.lower()
     url=url+'apikey='+apiKeys[school]
+    url=url+'&UpdatedSince='+UpdatedSince #include when changing to updates only
+    print url
     commData=requests.get(url).json()
     return commData['data']
 
-def getAllComms():
+def getAllComms(UpdatedSince=default_sdt):
     allCommData=[]
     for school in apiKeys:
-        commData=getComms(school)
+        commData=getComms(school,UpdatedSince)
         allCommData.extend(commData)
     return allCommData
     
@@ -500,7 +511,7 @@ def mapIncidents(incidents):
     errors=[]
     for incident in incidents:    
         if incident['Status'] == 'Resolved':# and incident['Infraction'] != 'Attendance Intervion': #logtypeid = 508
-            customFields = {cf['FieldName']:cf['NumValue'] for cf in incident['Custom_Fields']}
+            customFields = {cf['FieldName']:cf['StringValue'] for cf in incident['Custom_Fields']}
             psRecord={}
             
             try:
@@ -539,6 +550,7 @@ def mapIncidents(incidents):
                 psRecord['Discipline_IncidentLocDetail']=incident['Location']
                 psRecord['Discipline_ActionDate']=None
                 psRecord['Discipline_ActionTakenEndDate']=None
+                psRecord['Discipline_DurationAssigned']=None
                 penaltyString = None #define penalty string 
                 if len(incident['Penalties'])>0:   
                     penaltyString=incident['Penalties'][0]['PenaltyName']
@@ -554,6 +566,7 @@ def mapIncidents(incidents):
                     for penalty in incident['Penalties']:
                         if penalty['PenaltyName']=='Police Referral':
                             psRecord['Discipline_PoliceInvolvedFlag']=1
+                    
                             
                 #Clean up entry fields
                 entryFields = ['ReportedDetails','AdminSummary','Context','AddlReqs','FamilyMeetingNotes']
@@ -574,6 +587,7 @@ def mapIncidents(incidents):
                                     'REPORTED DETAILS: '         +'('+str(incident['CreateLast'])+', '+str(incident['CreateFirst'])+') '\
                                                                  +str(incident['ReportedDetails'])+' ***** '+\
                                     'ADMIN SUMMARY: '            +str(incident['AdminSummary'])   +' ***** '+\
+                                    'INJURY TYPE: '              +str(incident['Custom_Fields'][0]['StringValue'])+' ***** '+\
                                     'CONTEXT NOTES: '            +str(incident['Context'])        +' ***** '+\
                                     'ADDITIONAL REQUIREMENTS: '  +str(incident['AddlReqs'])       +' ***** '+\
                                     'FAMILY MEETING NOTES: '     +str(incident['FamilyMeetingNotes'])
@@ -601,7 +615,7 @@ def mapIncidents(incidents):
     return data
 
 
-    
+
     
 def mapIncidentsARC(incidents):
     incidentList=[]
@@ -614,11 +628,11 @@ def mapIncidentsARC(incidents):
                 'FollowupNotes', 'GradeLevelShort', 'HomeroomName', 'IncidentID','Infraction', 'InfractionTypeID', 'Injury Type', 'IsReferral', 'IssueTS',
                 'Location', 'LocationID', 'Police Involved','ReportedDetails', 'ReturnDate', 'ReturnPeriod','ReviewTS',
                 'SchoolID', 'SendAlert', 'Status','StatusID', 'StudentFirst', 'StudentID', 'StudentLast',
-                'StudentMiddle', 'StudentSchoolID', 'UpdateFirst', 'UpdateLast','UpdateMiddle', 'UpdateTS', 'Weapon Related']#, 'Hearing']    
+                'StudentMiddle', 'StudentSchoolID', 'UpdateFirst', 'UpdateLast','UpdateMiddle','UpdateTS', 'Weapon Related','DL_LASTUPDATE']#, 'Hearing']    
     #list of fields from about that contain dates
-    dateFields = ['CloseTS','CreateTS','IssueTS','ReturnDate','UpdateTS','ReviewTS']
+    dateFields = ['CloseTS','CreateTS','IssueTS','ReturnDate','UpdateTS','ReviewTS','DL_LASTUPDATE']
     #list of headers that are in custom_DLPenalties_raw table
-    penaltyFields = ['StartDate', 'SchoolID', 'EndDate', 'NumPeriods', 'PenaltyID', 'IncidentID', 'PenaltyName','IncidentPenaltyID', 'NumDays']
+    penaltyFields = ['StartDate', 'SchoolID', 'EndDate', 'NumPeriods', 'PenaltyID', 'IncidentID', 'PenaltyName','IncidentPenaltyID', 'NumDays','UpdatedSince'] #added UpdatedSince on 12/22/16
     for incident in incidents:
         record = {}
         #create a dictionary of custom field names and values        
@@ -628,6 +642,7 @@ def mapIncidentsARC(incidents):
         for field in fields:
             if field == 'Actions':
                 record[field] = None
+
             elif field in customFields.keys():
                 try:
                     record[field] = customFields[field]
@@ -673,6 +688,7 @@ def mapIncidentsARC(incidents):
         if len(incident['Penalties'])>0:
             for p in incident['Penalties']:
                 p['StudentSchoolID']=incident['StudentSchoolID']
+                p['UpdatedSince']=incident['DL_LASTUPDATE']['date'].split(' ')[0]  #added 12/22/16
         penalties.extend(copy.deepcopy(incident['Penalties'])) #make a deep copy so the print key is not removed from the original 
     #loop through penalties and delete to remove the print T/F field -- corresponds to 'Show on Incident Letter' checkbox in DL  
     for p in penalties: #if field is not in table field list about, remove it from the dictionary
@@ -824,7 +840,7 @@ def mapCommsARC(comms):
                   ,'DLSchoolID',	'DLStudentID','DLUserID','Email','FollowupBy','FollowupCloseTS'
                   ,'FollowupID','FollowupInitTS','FollowupOutstanding','FollowupRequest'
                   ,'FollowupResponse','PersonContacted','PhoneNumber','Reason','Relationship'
-                  ,'Response','SchoolName','SecondaryStudentID','StudentSchoolID','UserSchoolID']
+                  ,'Response','SchoolName','SecondaryStudentID','StudentSchoolID','UserSchoolID','DL_LASTUPDATE']
     for comm in comms:
         record = {}
         for field in commsFields:
