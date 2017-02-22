@@ -98,11 +98,10 @@ unicodeErrors={ u'\u201c':'"',
               }
 
 
-incidentSubtypes={   None : 'None', #when no infraction is entered -- needed to make sure that PS logs matches deanslist entries after all incidents were bulk resolved without validation
-                    'Academic Dishonesty':'ACADEMIC', #added to PS
+incidentSubtypes={  'Academic Dishonesty':'ACADEMIC', #added to PS
                     'Alcohol Related (A)':'ALCOHOL',        #added to PS  
                     'Arson':'ARSON',                  #added to PS  
-                    #'Attendance Intervention':'ATT INTERVENTION', #added to PS -- removed for the 16-17 school year 
+                    'Attendance Intervention':'ATT INTERVENTION', #added to PS
                     'Attendance/Skipping/Tardy':'SKIPPING', #added to PS
                     'Bullying':'BULLY',                 #added to PS
                     'Disruptive Behavior':'DB',         #added to PS
@@ -122,31 +121,42 @@ incidentSubtypes={   None : 'None', #when no infraction is entered -- needed to 
                     'Weapons Possession - Non-firearm (W)':'W-NONGUN',       #added to PS
                     'Weapons Possession - Rifles / Shotgun (W-RIFLESHOTGUN)':'W-RIFLESHOTGUN',      #added to PS
                     'Weapons Possession - Use of more than one of the above (W-MULTIPLE)':'W-MULTIPLE',         #added to PS
-                    'Weapons Possesssion - Any firearm that is not handgun, rifle, or shotgun (W-OTHER)':'W-OTHER'}
+                    'Weapons Possesssion - Any firearm that is not handgun, rifle, or shotgun (W-OTHER)':'W-OTHER', #added to PS
+                    'Weapons Possession (W)':'W-WEAPON', #added to PS
+                    'Physical Altercation':'PHYSICAL ALTERCATION', #added to PS}
+                     None: 'MISSING'
+                    }
                     
-commSubtypes={ None:'None'
-             ,'Academic':'ACADEMIC'
-             ,'Academics':'ACADEMIC'
-             ,'Attendance':'ATTENDANCE'
-             ,'Discipline':'DISCIPLINE'
-             ,'Enrollment':'ENROLLMENT'
-             ,'Medical':'MEDICAL'
-             ,'Other':'OTHER'
-             ,'Parent initiated':'PARENT INITIATED'
-             ,'Positive':'POSITIVE'
-             ,'Reminder':'REMINDER'
-            #,'Scheduling Meeting': 
-            #,'Truancy 5 absences':  
-            #,'Truancy 9 absences':
-            #,'Truancy 10 absences':
-            #,'Truancy 20 absences':
-            #,'Truancy 15 tardies':
-            #,'Truancy 27 tardies':
-            #,'Truancy 45 tardies':
-            #,'Truancy 60 tardies':
-            #,'Truancy unenroll':
-            #,'Sensitive':
+#these are the the log subtypes for Staff Contact, Student Contact, Parent Contact, and Third Party in PS                    
+commSubtypes={	 'Academics':	'ACADEMICS'
+            	,'Attendance':	'ATTENDANCE'
+            	,'Discipline':	'DISCIPLINE'
+            	,'Enrollment':	'ENROLLMENT'
+            	,'Home Visit':	'HOME VISIT'
+            	,'Medical':	'MEDICAL'
+            	,'Other':	'OTHER'
+            	,'Parent initiated':	'PARENT INITIATED'
+            	,'Positive':	'POSITIVE'
+            	,'Reminder':	'REMINDER'
+            	,'Scheduling Meeting':	'SCHEDULING MEETING'
+            	,'Truancy 5 absences':	'TRUANCY 5 ABSENCES'
+              ,'Truancy 7 absences':  'TRUANCY 7 ABSENCES'  
+            	,'Truancy 9 absences':	'TRUANCY 9 ABSENCES'
+            	,'Truancy 10 absences (CFSA call)':	'TRUANCY 10 ABSENCES'
+            	,'Truancy 15 absences':	'TRUANCY 15 ABSENCES'
+            	,'Truancy 20 absences (CFSA call)':	'TRUANCY 20 ABSENCES'
+              ,'Truancy 30 absences (CFSA call)': 'TRUANCY 30 ABSENCES'  
+            	,'Truancy 15 tardies':	'TRUANCY 15 TARDIES'
+            	,'Truancy 27 tardies':	'TRUANCY 27 TARDIES'
+            	,'Truancy 45 tardies':	'TRUANCY 45 TARDIES'
+            	,'Truancy 60 tardies':	'TRUANCY 60 TARDIES'
+            	,'Truancy Unenroll':	'TRUANCY UNENROLL'
+            	,'Sensitive':	'SENSITIVE'
+               ,'Crisis Management': 'CRISIS MANAGEMENT'
+               ,'Sensitive Parent Comm': 'SENSITIVE - PARENT'
+               ,None: "NONE"
              }
+
 
 
 #create default variables for start and end date as two weeks ago and the current date in format 'YYYY-MM-DD'
@@ -162,13 +172,15 @@ def convertUnicode(value):
             value = value.encode('ascii','ignore')
         except UnicodeDecodeError:
             next
+##        except AttributeError: #raised when value is None
+##            next
     return value
 
 
 def getReferrals(school):
     url='https://kippdc.deanslistsoftware.com/api/v1/referrals?'
     school=school.lower()
-    url+='apikey='+Config.get('school',school)
+    url+='apikey='+apiKeys[school]
     referrals=requests.get(url).json()
     return referrals['data']
 
@@ -223,7 +235,7 @@ def getSessionListsStudents(school, sdt = default_sdt, edt = default_edt):
                 if student['ID'] is not None:
                     incidentPenaltyID = student['ID']
                 else:
-                    incidentPenaltyID = int((str(session['ListID'])+str(session['Session'])+str(student['StudentSchoolID'])).replace("-",""))*-1 #combine listid, session, and studentID to create a unique ID from the lists
+                    incidentPenaltyID = -1*int((str(session['ListID'])+str(session['Session'])+str(student['StudentSchoolID'])).replace("-","")) #combine listid, session, and studentID to create a unique ID from the lists
                 studentConsequence = {'IncidentID':-1
                                      ,'PenaltyID':session['ListID']
                                      ,'ListName':session['ListName']  #PenaltyName  
@@ -316,20 +328,21 @@ def getAllHomework(sdt = default_sdt, edt = default_edt):
     return allHomeworkData
     
     
-def getIncidents(school):
+def getIncidents(school,UpdatedSince):
     url='https://kippdc.deanslistsoftware.com/api/v1/incidents?'
     school=school.lower()
-    url=url+'apikey='+apiKeys[school]+'&cf=Y'
+    url=url+'apikey='+apiKeys[school]+'&cf=Y&' #include when changing to updates only
+    url=url+'UpdatedSince='+UpdatedSince #include when changing to updates only
     incidentsData=requests.get(url).json()
+    print url
     return incidentsData['data']
     
-def getAllIncidents():
+def getAllIncidents(UpdatedSince=default_sdt):
     allIncidentsData=[]
     for school in apiKeys:
-        incidentsData=getIncidents(school)
+        print school
+        incidentsData=getIncidents(school,UpdatedSince)
         allIncidentsData.extend(incidentsData)
-        print(school)
-    #print(apiKeys.keys())
     return allIncidentsData
     
 def getStudents(school):
@@ -362,18 +375,20 @@ def getAllUsers():
         user['LastName'].replace(u'\xf3','o')
     return allUsersData
     
-def getComms(school):
-    print('retrieving %s comms data...' % (school))
+def getComms(school,UpdatedSince):
+    print 'retrieving %s comms data...' % (school)
     url='https://kippdc.deanslistsoftware.com/api/beta/export/get-comm-data.php?'
     school=school.lower()
     url=url+'apikey='+apiKeys[school]
+    url=url+'&UpdatedSince='+UpdatedSince #include when changing to updates only
+    print url
     commData=requests.get(url).json()
     return commData['data']
 
-def getAllComms():
+def getAllComms(UpdatedSince=default_sdt):
     allCommData=[]
     for school in apiKeys:
-        commData=getComms(school)
+        commData=getComms(school,UpdatedSince)
         allCommData.extend(commData)
     return allCommData
     
@@ -397,7 +412,6 @@ def getRosters(school):
     url=url+'apikey='+apiKeys[school]+'&rt=ALL'
     url=url+'&show_inactive=Y'
     rosterData=requests.get(url).json()
-    #alertsRemoved = copy.deepcopy(rosterData['data'])
     alertsRemoved = [r for r in rosterData['data'] if r['IntegrationID'] not in ['Guardian','Medical','Special Education','Discipline']]
     for row in alertsRemoved:    
         row['FirstName']=convertUnicode(copy.deepcopy(row['FirstName']))
@@ -426,13 +440,23 @@ def getAttendance(school,sdt = default_sdt, edt = default_edt):
     attendanceData=requests.get(url).json()
     for row in attendanceData['data']:
         #run unicode conversion on staff and student name fields
-        row['StaffFirstName']=convertUnicode(copy.deepcopy(row['StaffFirstName']))
-        row['StaffMiddleName']=convertUnicode(copy.deepcopy(row['StaffMiddleName']))
-        row['StaffLastName']=convertUnicode(copy.deepcopy(row['StaffLastName']))
-        row['StudentFirstName']=convertUnicode(copy.deepcopy(row['StudentFirstName']))
-        row['StudentMiddleName']=convertUnicode(copy.deepcopy(row['StudentMiddleName']))
-        row['StudentLastName']=convertUnicode(copy.deepcopy(row['StudentLastName']))
-    return attendanceData['data'] 
+        row['StaffFirstName'] = convertUnicode(copy.deepcopy(row['StaffFirstName']))
+        row['StaffMiddleName'] = convertUnicode(copy.deepcopy(row['StaffMiddleName']))
+        row['StaffLastName'] = convertUnicode(copy.deepcopy(row['StaffLastName']))
+        row['StudentFirstName'] = convertUnicode(copy.deepcopy(row['StudentFirstName']))
+        row['StudentMiddleName'] = convertUnicode(copy.deepcopy(row['StudentMiddleName']))
+        row['StudentLastName'] = convertUnicode(copy.deepcopy(row['StudentLastName']))
+        if row['Behavior'] not in ['Present','Tardy','No Attendance Taken']:
+            row['AttendanceCode'] = row['Behavior'].split(' ')[0].replace('"',"")
+        elif row['Behavior'] == 'Present':
+            row['AttendanceCode'] = None
+        elif row['Behavior'] == 'Tardy':
+            row['AttendanceCode'] = 'T'
+        elif row['Behavior'] == 'No Attendance Taken':
+            row['AttendanceCode'] = 'NA'
+        else:
+            row['AttendanceCode'] = '-----'
+    return attendanceData['data']
     
 def getAllAttendance(sdt = default_sdt, edt = default_edt):
     '''
@@ -464,6 +488,7 @@ def getClassAttendance(school,sdt = default_sdt, edt = default_edt):
         row['StudentFirstName']=convertUnicode(copy.deepcopy(row['StudentFirstName']))
         row['StudentMiddleName']=convertUnicode(copy.deepcopy(row['StudentMiddleName']))
         row['StudentLastName']=convertUnicode(copy.deepcopy(row['StudentLastName']))
+        row['AttendanceCode'] = None
     return attendanceData['data']
     
 def getAllClassAttendance(sdt = default_sdt, edt = default_edt):
@@ -482,7 +507,7 @@ def mapIncidents(incidents):
     errors=[]
     for incident in incidents:    
         if incident['Status'] == 'Resolved':# and incident['Infraction'] != 'Attendance Intervion': #logtypeid = 508
-            customFields = {cf['FieldName']:cf['NumValue'] for cf in incident['Custom_Fields']}
+            customFields = {cf['FieldName']:cf['StringValue'] for cf in incident['Custom_Fields']}
             psRecord={}
             
             try:
@@ -500,7 +525,7 @@ def mapIncidents(incidents):
                 except KeyError: #raised when incident infraction is not in the subtype list above. err
                     errors.append({'ID':incident['IncidentID'],'School':schoolName[incident['SchoolID']],'ErrorField':'Infraction', 'Error':'KeyError: Infraction: %s not a possible subtype' % (incident['Infraction'])}) 
                     psRecord['Subtype'] = None
-                if incident['Infraction']=='Illicit Drug Related (D)' or customFields['Drug Related']=='Y':
+                if incident['Infraction']=='Illicit Drug Related (D)':# or customFields['Drug Related']=='Y':
                     psRecord['Discipline_DrugRelatedFlag']=1
                 else:
                     psRecord['Discipline_DrugRelatedFlag']=0
@@ -521,6 +546,7 @@ def mapIncidents(incidents):
                 psRecord['Discipline_IncidentLocDetail']=incident['Location']
                 psRecord['Discipline_ActionDate']=None
                 psRecord['Discipline_ActionTakenEndDate']=None
+                psRecord['Discipline_DurationAssigned']=None
                 penaltyString = None #define penalty string 
                 if len(incident['Penalties'])>0:   
                     penaltyString=incident['Penalties'][0]['PenaltyName']
@@ -536,6 +562,7 @@ def mapIncidents(incidents):
                     for penalty in incident['Penalties']:
                         if penalty['PenaltyName']=='Police Referral':
                             psRecord['Discipline_PoliceInvolvedFlag']=1
+                    
                             
                 #Clean up entry fields
                 entryFields = ['ReportedDetails','AdminSummary','Context','AddlReqs','FamilyMeetingNotes']
@@ -556,6 +583,7 @@ def mapIncidents(incidents):
                                     'REPORTED DETAILS: '         +'('+str(incident['CreateLast'])+', '+str(incident['CreateFirst'])+') '\
                                                                  +str(incident['ReportedDetails'])+' ***** '+\
                                     'ADMIN SUMMARY: '            +str(incident['AdminSummary'])   +' ***** '+\
+                                    'INJURY TYPE: '              +str(incident['Custom_Fields'][0]['StringValue'])+' ***** '+\
                                     'CONTEXT NOTES: '            +str(incident['Context'])        +' ***** '+\
                                     'ADDITIONAL REQUIREMENTS: '  +str(incident['AddlReqs'])       +' ***** '+\
                                     'FAMILY MEETING NOTES: '     +str(incident['FamilyMeetingNotes'])
@@ -582,7 +610,8 @@ def mapIncidents(incidents):
     data={'psData':psData,'errors':errors}
     return data
 
-    
+
+
     
 def mapIncidentsARC(incidents):
     incidentList=[]
@@ -592,23 +621,24 @@ def mapIncidentsARC(incidents):
     #list of headers in the custom_DLIncidents_raw table    
     fields = [  'Actions',  'AddlReqs', 'AdminSummary', 'Alcohol Related','Category', 'CategoryID', 'CloseTS', 'Context',
                 'CreateBy', 'CreateFirst', 'CreateLast', 'CreateMiddle','CreateTS', 'CreateTitle', 'Drug Related', 'FamilyMeetingNotes',
-                'FollowupNotes', 'GradeLevelShort', 'HomeroomName', 'IncidentID','Infraction', 'InfractionTypeID', 'IsReferral', 'IssueTS',
+                'FollowupNotes', 'GradeLevelShort', 'HomeroomName', 'IncidentID','Infraction', 'InfractionTypeID', 'Injury Type', 'IsReferral', 'IssueTS',
                 'Location', 'LocationID', 'Police Involved','ReportedDetails', 'ReturnDate', 'ReturnPeriod','ReviewTS',
                 'SchoolID', 'SendAlert', 'Status','StatusID', 'StudentFirst', 'StudentID', 'StudentLast',
-                'StudentMiddle', 'StudentSchoolID', 'UpdateFirst', 'UpdateLast','UpdateMiddle', 'UpdateTS', 'Weapon Related']#, 'Hearing']    
+                'StudentMiddle', 'StudentSchoolID', 'UpdateFirst', 'UpdateLast','UpdateMiddle','UpdateTS', 'Weapon Related','DL_LASTUPDATE']#, 'Hearing']    
     #list of fields from about that contain dates
-    dateFields = ['CloseTS','CreateTS','IssueTS','ReturnDate','UpdateTS','ReviewTS']
+    dateFields = ['CloseTS','CreateTS','IssueTS','ReturnDate','UpdateTS','ReviewTS','DL_LASTUPDATE']
     #list of headers that are in custom_DLPenalties_raw table
-    penaltyFields = ['StartDate', 'SchoolID', 'EndDate', 'NumPeriods', 'PenaltyID', 'IncidentID', 'PenaltyName','IncidentPenaltyID', 'NumDays']
+    penaltyFields = ['StartDate', 'SchoolID', 'EndDate', 'NumPeriods', 'PenaltyID', 'IncidentID', 'PenaltyName','IncidentPenaltyID', 'NumDays','UpdatedSince'] #added UpdatedSince on 12/22/16
     for incident in incidents:
         record = {}
         #create a dictionary of custom field names and values        
-        customFields = {cf['FieldName']:cf['NumValue'] for cf in incident['Custom_Fields']}
+        customFields = {cf['FieldName']:cf['StringValue'] for cf in incident['Custom_Fields']}
         
         #loop through fields in field list (theses are the columns in custom_DLIncidents_raw)
         for field in fields:
             if field == 'Actions':
                 record[field] = None
+
             elif field in customFields.keys():
                 try:
                     record[field] = customFields[field]
@@ -654,6 +684,7 @@ def mapIncidentsARC(incidents):
         if len(incident['Penalties'])>0:
             for p in incident['Penalties']:
                 p['StudentSchoolID']=incident['StudentSchoolID']
+                p['UpdatedSince']=incident['DL_LASTUPDATE']['date'].split(' ')[0]  #added 12/22/16
         penalties.extend(copy.deepcopy(incident['Penalties'])) #make a deep copy so the print key is not removed from the original 
     #loop through penalties and delete to remove the print T/F field -- corresponds to 'Show on Incident Letter' checkbox in DL  
     for p in penalties: #if field is not in table field list about, remove it from the dictionary
@@ -669,11 +700,12 @@ def mapIncidentsARC(incidents):
         
         
 def mapComms(commsData):
-    print("mapping comms data...")
+    print "mapping comms data..."
     psData=[]
     errors=[]
     users={}
     for user in getAllUsers(): #fill dictionary users with userID : username key/value pairs
+        
         try: #do unicode conversions on user last name
             user['LastName'] = str(convertUnicode(copy.deepcopy(user['LastName'])))
         except AttributeError: #raised when value is none -- this should never happen
@@ -688,6 +720,7 @@ def mapComms(commsData):
                            'School':schoolName[user['DLSchoolID']],
                            'ErrorField':'LastName', 
                            'Error':'UnicodeEncodeError'})
+        
         try: #do unicode conversions on user first name
             user['FirstName'] = str(convertUnicode(copy.deepcopy(user['FirstName'])))
         except AttributeError: #raised when value is none -- this should never happen
@@ -727,35 +760,47 @@ def mapComms(commsData):
                 comm[field]='N/A'           
                 
         #create the entry
-        if comm['CallType'] == 'P':  #call type is phone call
-            psRecord['Entry'] = str(comm['PersonContacted'])+' ('+str(comm['CommWith'])+': '+str(comm['Relationship'])+')'+' ***** '+\
-                                str(comm['CallType'])+' - '+str(comm['CallStatus'])+' - '+str(comm['PhoneNumber'])+' ***** '+\
-                                'CALL TOPIC: '+str(comm['CallTopic'])+' ***** '+\
-                                'RESPONSE: '+str(comm['Response'])+' ***** '+\
-                                'FOLLOWUP REQUEST: '+str(comm['FollowupRequest'])+' ***** '+\
-                                'FOLLOWUP RESPONSE: '+str(comm['FollowupResponse'])
-        elif comm['CallType'] == 'E': #call type is email
-            psRecord['Entry'] = str(comm['PersonContacted'])+' ('+str(comm['CommWith'])+': '+str(comm['Relationship'])+')'+' ***** '+\
-                                str(comm['CallType'])+' - '+str(comm['CallStatus'])+' - '+str(comm['Email'])+' ***** '+\
-                                'CALL TOPIC: '+str(comm['CallTopic'])+' ***** '+\
-                                'RESPONSE: '+str(comm['Response'])+' ***** '+\
-                                'FOLLOWUP REQUEST: '+str(comm['FollowupRequest'])+' ***** '+\
-                                'FOLLOWUP RESPONSE: '+str(comm['FollowupResponse'])
-        elif comm['CallType'] == 'IP': #call type is in person
-            psRecord['Entry'] =  str(comm['PersonContacted'])+' ('+str(comm['CommWith'])+': '+str(comm['Relationship'])+')'+' ***** '+\
-                                str(comm['CallType'])+' ***** '+\
-                                'CALL TOPIC: '+str(comm['CallTopic'])+' ***** '+\
-                                'RESPONSE: '+str(comm['Response'])+' ***** '+\
-                                'FOLLOWUP REQUEST: '+str(comm['FollowupRequest'])+' ***** '+\
-                                'FOLLOWUP RESPONSE: '+str(comm['FollowupResponse'])
-        elif comm['CallType'] == '': #call type is none (comms with students (STU) or other staff member (ED)) 
-            psRecord['Entry'] =  str(comm['PersonContacted'])+' ('+str(comm['CommWith'])+': '+str(comm['Relationship'])+')'+' ***** '+\
-                                str(comm['CallType'])+' ***** '+\
-                                'CALL TOPIC: '+str(comm['CallTopic'])+' ***** '+\
-                                'RESPONSE: '+str(comm['Response'])+' ***** '+\
-                                'FOLLOWUP REQUEST: '+str(comm['FollowupRequest'])+' ***** '+\
-                                'FOLLOWUP RESPONSE: '+str(comm['FollowupResponse'])
-                                
+        try:
+            if comm['CallType'] == 'P':  #call type is phone call
+                psRecord['Entry'] = str(comm['PersonContacted'])+' ('+str(comm['CommWith'])+': '+str(comm['Relationship'])+')'+' ***** '+\
+                                    str(comm['CallType'])+' - '+str(comm['CallStatus'])+' - '+str(comm['PhoneNumber'])+' ***** '+\
+                                    'CALL TOPIC: '+str(comm['CallTopic'])+' ***** '+\
+                                    'RESPONSE: '+str(comm['Response'])+' ***** '+\
+                                    'FOLLOWUP REQUEST: '+str(comm['FollowupRequest'])+' ***** '+\
+                                    'FOLLOWUP RESPONSE: '+str(comm['FollowupResponse'])
+            elif comm['CallType'] == 'E': #call type is email
+                psRecord['Entry'] = str(comm['PersonContacted'])+' ('+str(comm['CommWith'])+': '+str(comm['Relationship'])+')'+' ***** '+\
+                                    str(comm['CallType'])+' - '+str(comm['CallStatus'])+' - '+str(comm['Email'])+' ***** '+\
+                                    'CALL TOPIC: '+str(comm['CallTopic'])+' ***** '+\
+                                    'RESPONSE: '+str(comm['Response'])+' ***** '+\
+                                    'FOLLOWUP REQUEST: '+str(comm['FollowupRequest'])+' ***** '+\
+                                    'FOLLOWUP RESPONSE: '+str(comm['FollowupResponse'])
+            elif comm['CallType'] == 'IP': #call type is in person
+                psRecord['Entry'] =  str(comm['PersonContacted'])+' ('+str(comm['CommWith'])+': '+str(comm['Relationship'])+')'+' ***** '+\
+                                    str(comm['CallType'])+' ***** '+\
+                                    'CALL TOPIC: '+str(comm['CallTopic'])+' ***** '+\
+                                    'RESPONSE: '+str(comm['Response'])+' ***** '+\
+                                    'FOLLOWUP REQUEST: '+str(comm['FollowupRequest'])+' ***** '+\
+                                    'FOLLOWUP RESPONSE: '+str(comm['FollowupResponse'])
+            elif comm['CallType'] == '': #call type is none (comms with students (STU) or other staff member (ED)) 
+                psRecord['Entry'] =  str(comm['PersonContacted'])+' ('+str(comm['CommWith'])+': '+str(comm['Relationship'])+')'+' ***** '+\
+                                    str(comm['CallType'])+' ***** '+\
+                                    'CALL TOPIC: '+str(comm['CallTopic'])+' ***** '+\
+                                    'RESPONSE: '+str(comm['Response'])+' ***** '+\
+                                    'FOLLOWUP REQUEST: '+str(comm['FollowupRequest'])+' ***** '+\
+                                    'FOLLOWUP RESPONSE: '+str(comm['FollowupResponse'])
+            elif comm['CallType']=='3P':
+                psRecord['Entry'] = str(comm['PersonContacted'])+' ('+str(comm['CommWith'])+' -- '+str(comm['ThirdParty'])+': '+str(comm['Relationship'])+')'+' ..... '+\
+                                    str(comm['CallType'])+' ..... '+\
+                                    'CALL TOPIC: '+str(comm['CallTopic'])+' ..... '+\
+                                    'RESPONSE/FOLLOWUP: '+str(comm['Response'])+' ..... '+\
+                                    'FOLLOWUP REQUEST: '+str(comm['FollowupRequest'])+' ***** '+\
+                                    'FOLLOWUP RESPONSE: '+str(comm['FollowupResponse'])
+        except UnicodeError:
+            errors.append({'ID':comm['DLCallLogID'],
+                               'School':schoolName[comm['DLSchoolID']],
+                               'ErrorField':'Unknown', 
+                               'Error':'UnicodeEncodeError'})                        
         psRecord['SchoolID']=int(schoolid[comm['DLSchoolID']]) #set Powerschool schoolID
         
         #set the logtypeID -- should 
@@ -765,6 +810,8 @@ def mapComms(commsData):
             psRecord['LogTypeID']=6145 #Staff Contact
         elif comm['CommWith']=='STU':
             psRecord['LogTypeID']=6143 #Student Contact
+        elif comm['CommWith'] == '3P':
+                psRecord['LogTypeID'] = 6982 #Third Party
         try:
             psRecord['Subtype']=commSubtypes[comm['Reason']]
         except KeyError:
@@ -783,7 +830,7 @@ def mapComms(commsData):
         data={'psData':psData,'errors':errors}
     return data
 
-
+    
     
 def mapCommsARC(comms):
     commsList = []
@@ -793,7 +840,7 @@ def mapCommsARC(comms):
                   ,'DLSchoolID',	'DLStudentID','DLUserID','Email','FollowupBy','FollowupCloseTS'
                   ,'FollowupID','FollowupInitTS','FollowupOutstanding','FollowupRequest'
                   ,'FollowupResponse','PersonContacted','PhoneNumber','Reason','Relationship'
-                  ,'Response','SchoolName','SecondaryStudentID','StudentSchoolID','UserSchoolID']
+                  ,'Response','SchoolName','SecondaryStudentID','StudentSchoolID','UserSchoolID','DL_LASTUPDATE']
     for comm in comms:
         record = {}
         for field in commsFields:
@@ -875,4 +922,7 @@ def writeCSV(data,delimiter,filename):
         #dict_writer.writerows(toCSV)
         for row in toCSV:
             dict_writer.writerow(row)
+
+
+
 
